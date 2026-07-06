@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ledger — a bank that never stores a balance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#14261f; --ink-soft:#3d5249; --paper:#fbfaf5;
+    --bar:#e4efe4; --bar-line:#cfe0cf;
+    --credit:#1f7a4d; --debit:#b23a2e; --gold:#b7892b;
+    --rule:#d8d4c4; --card:#ffffff; --shadow:0 1px 0 var(--rule),0 12px 30px -18px rgba(20,38,31,.35);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Inter",system-ui,sans-serif;line-height:1.5;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
+  .num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+
+  header{border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:26px}
+  .brand{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  h1{font-family:"Spectral",serif;font-weight:700;font-size:34px;margin:0;letter-spacing:-.01em}
+  .tag{font-family:"Spectral",serif;font-style:italic;color:var(--ink-soft);font-size:17px}
+  .sub{margin-top:6px;color:var(--ink-soft);font-size:13.5px}
+
+  .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:22px;align-items:start}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+
+  .card{background:var(--card);border:1px solid var(--rule);border-radius:12px;
+    padding:20px;box-shadow:var(--shadow);margin-bottom:22px}
+  .card h2{font-family:"Spectral",serif;font-size:14px;font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink-soft);margin:0 0 14px}
+
+  /* balance hero */
+  .balance-hero{background:linear-gradient(180deg,#16281f,#0f1d17);color:#eef4ee;border:none}
+  .balance-hero h2{color:#9bb7a6}
+  .bal-num{font-family:"IBM Plex Mono",monospace;font-size:52px;font-weight:600;
+    letter-spacing:-.02em;line-height:1;margin:2px 0 8px}
+  .bal-rupees{color:#c8d8cc;font-size:15px}
+  .replay{margin-top:16px;padding-top:14px;border-top:1px dashed rgba(255,255,255,.18);
+    font-size:13px;color:#9bb7a6;display:flex;align-items:center;gap:8px}
+  .replay b{color:var(--gold);font-family:"IBM Plex Mono",monospace}
+
+  .chip{display:inline-flex;align-items:center;gap:8px;background:var(--bar);
+    border:1px solid var(--bar-line);border-radius:999px;padding:6px 12px;font-size:13px}
+  .chip .num{font-weight:600}
+  .muted{color:var(--ink-soft);font-size:13px}
+
+  label{display:block;font-size:12px;color:var(--ink-soft);margin:0 0 5px;font-weight:500}
+  input{font-family:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--rule);
+    border-radius:8px;background:#fff;color:var(--ink);width:100%}
+  input.num{font-family:"IBM Plex Mono",monospace}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+  .row>div{flex:1;min-width:120px}
+
+  button{font-family:inherit;font-weight:600;font-size:14px;cursor:pointer;
+    border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:8px;
+    padding:10px 14px;transition:transform .05s ease,opacity .15s}
+  button:hover{opacity:.9}
+  button:active{transform:translateY(1px)}
+  button.ghost{background:#fff;color:var(--ink)}
+  button.credit{background:var(--credit);border-color:var(--credit)}
+  button.debit{background:var(--debit);border-color:var(--debit)}
+  button.gold{background:var(--gold);border-color:var(--gold)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .btnrow.small button{padding:8px 11px;font-size:12.5px;font-weight:500}
+
+  /* ledger tape */
+  .tape{border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+  .tape-head,.tape-row{display:grid;grid-template-columns:52px 1fr 110px 120px;gap:0;
+    align-items:center}
+  .tape-head{background:var(--ink);color:#dfe8e0;font-size:11px;letter-spacing:.06em;
+    text-transform:uppercase;padding:9px 14px}
+  .tape-row{padding:11px 14px;border-top:1px solid var(--bar-line);
+    background:var(--bar);font-size:14px}
+  .tape-row:nth-child(even){background:#eef5ee}
+  .tape-row.fresh{animation:flash 1.1s ease}
+  @keyframes flash{0%{background:#fff6d9}100%{}}
+  .tape-row .amt{text-align:right;font-family:"IBM Plex Mono",monospace;font-weight:600}
+  .tape-row .amt.credit{color:var(--credit)}
+  .tape-row .amt.debit{color:var(--debit)}
+  .tape-row .run{text-align:right;font-family:"IBM Plex Mono",monospace;color:var(--ink)}
+  .tape-row .desc{color:var(--ink-soft);font-size:12.5px}
+  .type-pill{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;
+    padding:2px 7px;border-radius:5px;display:inline-block}
+  .type-pill.credit{background:#dff0e6;color:var(--credit)}
+  .type-pill.debit{background:#f6e0dd;color:var(--debit)}
+  .empty{padding:26px 14px;text-align:center;color:var(--ink-soft);font-size:13.5px;background:var(--bar)}
+
+  /* narration */
+  .log{max-height:340px;overflow-y:auto;display:flex;flex-direction:column-reverse;gap:0}
+  .log-item{padding:11px 0;border-top:1px solid var(--rule);font-size:13.5px}
+  .log-item:first-child{border-top:none}
+  .log-item .k{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
+    padding:2px 6px;border-radius:5px;margin-right:8px}
+  .k.ok{background:#dff0e6;color:var(--credit)}
+  .k.block{background:#f6e0dd;color:var(--debit)}
+  .k.info{background:var(--bar);color:var(--ink-soft)}
+  .log-item small{color:var(--ink-soft)}
+
+  .banner{padding:12px 15px;border-radius:9px;font-size:14px;margin-bottom:16px;display:none}
+  .banner.show{display:block}
+  .banner.err{background:#f7e4e1;border:1px solid #e6b8b0;color:#8f2e24}
+  .banner.good{background:#e2f1e8;border:1px solid #b6ddc4;color:#1c6b44}
+
+  .foot{margin-top:30px;color:var(--ink-soft);font-size:12.5px;text-align:center}
+  code{font-family:"IBM Plex Mono",monospace;background:var(--bar);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>The Ledger</h1>
+      <span class="tag">balance is never stored — it is replayed from events</span>
+    </div>
+    <div class="sub">Every action below hits your real API on <code>localhost:3000</code>. Watch the event tape grow and the balance rebuild from it.</div>
+  </header>
+
+  <div id="banner" class="banner"></div>
+
+  <!-- setup -->
+  <div class="card">
+    <h2>Account</h2>
+    <div class="row">
+      <div>
+        <label for="name">Open a new account</label>
+        <input id="name" placeholder="e.g. Riya" />
+      </div>
+      <button class="ghost" onclick="createAccount()">Open account</button>
+      <div style="flex:0 0 auto" id="activeWrap" hidden>
+        <label>Active</label>
+        <span class="chip">acct <span class="num" id="activeId">–</span> · <span id="activeName">–</span></span>
+      </div>
+    </div>
+    <div class="muted" style="margin-top:10px">Amounts are integers in <b>paise</b> (100 paise = ₹1). No decimals — a real fintech rule, so money never loses precision.</div>
+  </div>
+
+  <div class="grid">
+    <!-- left column -->
+    <div>
+      <div class="card balance-hero">
+        <h2>Current balance</h2>
+        <div class="bal-num num" id="balance">0</div>
+        <div class="bal-rupees">= ₹<span id="balanceRupees">0.00</span></div>
+        <div class="replay">computed by replaying <b id="eventCount">0</b> events — no balance column exists</div>
+      </div>
+
+      <div class="card">
+        <h2>Move money</h2>
+        <div class="row">
+          <div>
+            <label for="amount">Amount (paise)</label>
+            <input id="amount" class="num" value="1000" />
+          </div>
+        </div>
+        <div class="btnrow">
+          <button class="credit" onclick="deposit()">Deposit</button>
+          <button class="debit" onclick="withdraw()">Withdraw</button>
+        </div>
+        <div class="row" style="margin-top:16px">
+          <div>
+            <label for="toId">Transfer to account id</label>
+            <input id="toId" class="num" placeholder="e.g. 3" />
+          </div>
+          <button class="ghost" onclick="transfer()">Send transfer</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Prove the guarantees</h2>
+        <div class="btnrow small">
+          <button class="ghost" onclick="retryDeposit()">Retry last deposit (same key)</button>
+          <button class="ghost" onclick="overdraw()">Try to overdraw</button>
+          <button class="gold" onclick="snapshot()">Take snapshot</button>
+          <button class="ghost" onclick="integrity()">Check integrity</button>
+        </div>
+        <div class="muted" style="margin-top:12px">These buttons demonstrate the hard parts: idempotent retries, overdraft protection, snapshotting, and the whole-ledger zero-sum check.</div>
+      </div>
+    </div>
+
+    <!-- right column -->
+    <div>
+      <div class="card">
+        <h2>Event tape · this account</h2>
+        <div class="tape" id="tape">
+          <div class="tape-head"><div>#</div><div>Type / note</div><div class="amt">Amount</div><div class="run">Balance</div></div>
+          <div class="empty" id="tapeEmpty">No events yet. Open an account and deposit to see the first event append.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>What just happened</h2>
+        <div class="log" id="log">
+          <div class="log-item"><span class="k info">start</span>Open an account, then deposit. I'll narrate each step.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Same-origin calls to your Express API. If actions fail, make sure <code>npm start</code> and Docker are running.</div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let acct = null;            // { id, name }
+let lastDeposit = null;     // { amount, key }
+
+function banner(msg, kind){
+  const b = $("banner");
+  b.className = "banner show " + kind;
+  b.textContent = msg;
+  clearTimeout(banner._t);
+  banner._t = setTimeout(()=>b.className="banner", 4200);
+}
+
+function narrate(kind, html){
+  const item = document.createElement("div");
+  item.className = "log-item";
+  const label = kind==="ok"?"ok":kind==="block"?"blocked":"info";
+  item.innerHTML = `<span class="k ${kind}">${label}</span>${html}`;
+  $("log").prepend(item);
+}
+
+async function api(method, path, body, headers){
+  const res = await fetch(path, {
+    method,
+    headers: Object.assign({"Content-Type":"application/json"}, headers||{}),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = null;
+  try{ data = await res.json(); }catch{}
+  return { ok: res.ok, status: res.status, data };
+}
+
+function requireAcct(){
+  if(!acct){ banner("Open an account first.", "err"); return false; }
+  return true;
+}
+function amount(){ return parseInt($("amount").value, 10); }
+
+async function createAccount(){
+  const name = $("name").value.trim() || "Riya";
+  const r = await api("POST","/accounts",{name});
+  if(!r.ok){ banner("Could not open account — is the server running?","err"); return; }
+  acct = { id: r.data.id, name: r.data.name };
+  $("activeWrap").hidden = false;
+  $("activeId").textContent = acct.id;
+  $("activeName").textContent = acct.name;
+  banner(`Opened account #${acct.id} (${acct.name}).`,"good");
+  narrate("info", `Opened account <b>#${acct.id}</b> for ${acct.name}. It starts empty — balance <span class="num">0</span>, zero events.`);
+  await refresh();
+}
+
+async function deposit(){
+  if(!requireAcct()) return;
+  const amt = amount();
+  const key = "dep-" + acct.id + "-" + Date.now();
+  const r = await api("POST",`/accounts/${acct.id}/deposit`,{amount:amt},{"Idempotency-Key":key});
+  if(!r.ok){ banner(r.data?.message||"Deposit failed","err"); return; }
+  lastDeposit = { amount: amt, key };
+  narrate("ok", `Deposited <span class="num">${amt}</span> paise. Two events were appended: <b class="num" style="color:var(--credit)">+${amt}</b> to you, <b class="num" style="color:var(--debit)">−${amt}</b> from EXTERNAL_WORLD — so the whole ledger still sums to zero.`);
+  await refresh();
+}
+
+async function retryDeposit(){
+  if(!requireAcct()) return;
+  if(!lastDeposit){ banner("Do a deposit first, then retry it.","err"); return; }
+  const r = await api("POST",`/accounts/${acct.id}/deposit`,{amount:lastDeposit.amount},{"Idempotency-Key":lastDeposit.key});
+  if(r.data?.idempotentReplay){
+    narrate("info", `Re-sent the <em>same</em> deposit (same idempotency key). Result: <b>idempotentReplay = true</b> — no new event, no double money. Retry is safe.`);
+    banner("Duplicate ignored — money posted only once.","good");
+  }else{
+    narrate("info","Retry returned a new transaction (unexpected).");
+  }
+  await refresh();
+}
+
+async function withdraw(){
+  if(!requireAcct()) return;
+  const amt = amount();
+  const r = await api("POST",`/accounts/${acct.id}/withdraw`,{amount:amt});
+  if(r.status===422){
+    narrate("block", `Withdraw of <span class="num">${amt}</span> was <b>rejected</b>: insufficient funds. The overdraft check ran <em>inside a row lock</em>, so the balance can't go negative even under concurrent requests.`);
+    banner("Blocked: insufficient funds.","err");
+    return;
+  }
+  if(!r.ok){ banner(r.data?.message||"Withdraw failed","err"); return; }
+  narrate("ok", `Withdrew <span class="num">${amt}</span> paise. One debit event on you, one credit on EXTERNAL_WORLD.`);
+  await refresh();
+}
+
+async function overdraw(){
+  if(!requireAcct()) return;
+  const big = (parseInt($("balance").textContent,10)||0) + 100000;
+  const r = await api("POST",`/accounts/${acct.id}/withdraw`,{amount:big});
+  if(r.status===422){
+    narrate("block", `Tried to withdraw <span class="num">${big}</span> (more than the balance). <b>Rejected</b> — this is the overdraft guarantee working.`);
+    banner("Overdraft correctly blocked.","good");
+  }else{
+    narrate("info","Overdraw test did not reject (unexpected).");
+  }
+  await refresh();
+}
+
+async function transfer(){
+  if(!requireAcct()) return;
+  const toId = parseInt($("toId").value,10);
+  if(!toId){ banner("Enter a destination account id.","err"); return; }
+  const amt = amount();
+  const r = await api("POST",`/transfers`,{fromId:acct.id,toId,amount:amt});
+  if(r.status===422){ narrate("block",`Transfer rejected: not enough balance.`); banner("Transfer blocked: insufficient funds.","err"); return; }
+  if(!r.ok){ banner(r.data?.message||"Transfer failed","err"); return; }
+  narrate("ok", `Transferred <span class="num">${amt}</span> to account #${toId}. Both accounts were locked in sorted id order (deadlock-safe), debit on you, credit on them.`);
+  await refresh();
+}
+
+async function snapshot(){
+  if(!requireAcct()) return;
+  const r = await api("POST",`/accounts/${acct.id}/snapshot`);
+  if(!r.ok){ banner("Snapshot failed","err"); return; }
+  narrate("info", `Snapshot saved: balance <b class="num">${r.data.balance}</b> covering up to event id <span class="num">${r.data.lastEntryId}</span>. Future reads start here and replay only newer events — a disposable cache, rebuildable from events.`);
+  banner("Snapshot taken.","good");
+}
+
+async function integrity(){
+  const r = await api("GET",`/admin/integrity`);
+  if(!r.ok){ banner("Integrity check failed","err"); return; }
+  if(r.data.healthy){
+    narrate("ok", `Whole-ledger integrity check: total = <b class="num">0</b>, healthy = true. Every credit has a matching debit across the entire system.`);
+    banner("Ledger healthy — sums to zero.","good");
+  }else{
+    narrate("block", `Integrity check FAILED: total = ${r.data.ledgerTotal}. There is a bug somewhere.`);
+    banner("Ledger NOT healthy!","err");
+  }
+}
+
+async function refresh(){
+  if(!acct) return;
+  const bal = await api("GET",`/accounts/${acct.id}/balance`);
+  const stmt = await api("GET",`/accounts/${acct.id}/statement`);
+  const balance = bal.data?.balance ?? "0";
+  $("balance").textContent = balance;
+  $("balanceRupees").textContent = (Number(balance)/100).toFixed(2);
+  const rows = Array.isArray(stmt.data) ? stmt.data : [];
+  $("eventCount").textContent = rows.length;
+  renderTape(rows);
+}
+
+function renderTape(rows){
+  const tape = $("tape");
+  // remove old rows (keep the head)
+  [...tape.querySelectorAll(".tape-row,.empty")].forEach(n=>n.remove());
+  if(rows.length===0){
+    const e=document.createElement("div"); e.className="empty";
+    e.textContent="No events yet."; tape.appendChild(e); return;
+  }
+  rows.forEach((r,i)=>{
+    const div=document.createElement("div");
+    div.className="tape-row"+(i===rows.length-1?" fresh":"");
+    const dir=r.direction;
+    div.innerHTML =
+      `<div class="num">${r.id}</div>`+
+      `<div><span class="type-pill ${dir}">${dir}</span> <span class="desc">${r.description||""}</span></div>`+
+      `<div class="amt ${dir}">${dir==="credit"?"+":"−"}${r.amount}</div>`+
+      `<div class="run num">${r.running_balance}</div>`;
+    tape.appendChild(div);
+  });
+}
+</script>
+</body>
+</html>
