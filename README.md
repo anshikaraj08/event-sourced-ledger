@@ -6,6 +6,8 @@
 
 ![stack](https://img.shields.io/badge/Node.js-18+-3c873a) ![db](https://img.shields.io/badge/PostgreSQL-16-336791) ![docker](https://img.shields.io/badge/Docker-Compose-2496ed)
 
+**Created by Anshika Raj** · Git username: `anshikaraj08`
+
 ---
 
 ## Why this design
